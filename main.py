@@ -18,10 +18,14 @@ class Point:
         self.x = x
         self.y = y
 
+    def __str__(self):
+        return f"({self.x}, {self.y})"
+
 
 class PointsList:
     def __init__(self, points: list[Point]):
         self.points = points
+
 
 
 
@@ -86,43 +90,8 @@ class ReadLidarThread(QtCore.QThread):
     #     return points
         
 
-    def parse_data_to_point(self, packet) -> list[Point]:
-        # print("THE HEX")
-        # for b in packet:
-        #     print(hex(b), end=" | ")
-
-        # print()
-        # print("END HEX")
-        
-        def from_data(start, end):
-            return packet[start:end]
-
-        if len(packet) < 11:  # minimal packet size
-            return []
-
-        ph = packet[0:2]
-        ct = packet[2]
-        lsn = packet[3]
-        fsa = packet[4:6]
-        lsa = packet[6:8]
-        cs = packet[8:10]
-        all_bytes = packet[0:len(packet)]
-
-        if ct != 0:
-            print("ct is zero, start packet")
-            return []
-
-        num_sample = lsn
-        if num_sample == 0:
-            return []
-
-        start_ang = (fsa[1] << 8) | fsa[0]
-        end_ang = (lsa[1] << 8) | lsa[0]
-
-        # checksum
-        calc_cs = 0x0000 
-
-        total_len=10 + 2 * lsn
+    def compute_checksum(self, packet: bytearray) -> (int, int):
+        total_len=len(packet)
 
         left_cs = 0x00
         right_cs = 0x00
@@ -135,59 +104,97 @@ class ReadLidarThread(QtCore.QThread):
             else:
                 right_cs ^= b
 
-        print(f"{hex(left_cs)}, {hex(right_cs)}")
-
-        # for i, b in enumerate(packet):
-        #     if i % 2 != 0:
-        #         calc_cs |= (b << 8) 
-        #     else:
-        #         calc_cs |= (b)
-            
-        
-        # for n in range(0, total_len-1, 2):
-        #     if n == 8 or n==9:
-        #         continue
-        #     two_byte = (all_bytes[n+1] << 8) | all_bytes[n]
-        #     before_cs = calc_cs
-        #     calc_cs ^= two_byte
-        #     print(f"{hex(before_cs)} ^ {hex(two_byte)} ({n}): {hex(calc_cs)}")
-        # calc_cs = 0x0000
-        # for n in range(0, total_len, 2):
-        #     # skip CS bytes
-        #     if n == 8:
-        #         continue
+        return (left_cs, right_cs)
     
-        #     if n+1 >= len(all_bytes):
-        #         two_byte = all_bytes[n]
-        #     else:
-        #         two_byte = (all_bytes[n+1] << 8) | all_bytes[n]
-    
-        #     before_cs = calc_cs
-        #     calc_cs ^= two_byte
-        #     print(f"{hex(before_cs)} ^ {hex(two_byte)} ({n}): {hex(calc_cs)}")
+    def parse_data_to_point(self, packet) -> list[Point]:
+        # print("THE HEX")
+        # for b in packet:
+        #     print(hex(b), end=" | ")
 
+        # print()
+        # print("END HEX")
         
+        # def from_data(start, end):
+        #     return packet[start:end]
 
-        # word_cs = (cs[1] << 8) | cs[0]
-        if cs[0] != left_cs or cs[1] != right_cs:
-            log(f"calc_cs: {hex(left_cs)} {hex(right_cs)}, packet_cs: {hex(cs[0])} {hex(cs[1])}")
+        print("YW")
+        if len(packet) < 11:  # minimal packet size
             return []
 
+        ph = packet[0:2]
+        ct = packet[2]
+        lsn = packet[3]
+        fsa = packet[4:6]
+        lsa = packet[6:8]
+        cs = packet[8:10]
+        all_bytes = packet[0:len(packet)]
+
+
+        num_sample = lsn
+        # if num_sample == 0:
+        #     return []
+
+        if ct == 0:
+            print("packet is a point cloud")
+
+            # checksum
+            calc_cs = 0x0000 
+
+            left_cs, right_cs = self.compute_checksum(packet)
+            print(f"{hex(left_cs)}, {hex(right_cs)}")
+
+            if cs[0] != left_cs or cs[1] != right_cs:
+                print("cs not the same")
+                return []
+
         points = []
-        for n in range(num_sample):
-            sn_byte = from_data(11 + n*2, 11 + n*2 + 2)
+        raw_start_ang = ((fsa[1] << 8) | fsa[0])
+        raw_end_ang = ((lsa[1] << 8) | lsa[0]) 
+        start_ang = (raw_start_ang >> 1) / 64.0
+        end_ang = (raw_end_ang >> 1) / 64.0
+
+        first_dist= ((packet[11] << 8) | packet[10]) / 4.0
+        last_dist = ((packet[num_sample-1] << 8) | packet[num_sample-2]) / 4.0
+        start_ang_correction = math.atan(21.8 * ((155.3-first_dist)/max(155.3*first_dist, 1)))
+        end_ang_correction = math.atan(21.8 * ((155.3-last_dist)/max(155.3*last_dist, 1)))
+        # start_ang_correction = math.atan(21.8 * ((155.3-first_dist)/max(155.3, 1)))
+        # end_ang_correction = math.atan(21.8 * ((155.3-last_dist)/max(155.3, 1)))
+
+        start_ang = start_ang + start_ang_correction
+        end_ang = end_ang + end_ang_correction
+
+        # start_ang = start_ang % 360
+        # end_ang = end_ang % 360
+
+        for n in range(0, num_sample):
+            sn_byte = packet[10 + n*2 : 12 + n*2]
             if len(sn_byte) < 2:
-                log("broken packet")
                 continue
 
-            sn = (sn_byte[1] << 8) | sn_byte[0]
-            step = (end_ang - start_ang) / max(num_sample - 1, 1)
-            ang = math.radians(start_ang + step * n)
+            dist = (sn_byte[1] << 8) | sn_byte[0]
+            dist = dist / 4.0
+            if dist <= 50:
+                continue
 
-            points.append(Point(
-                sn * math.cos(ang),
-                sn * math.sin(ang)
-            ))
+
+            clockwise_diff = (
+                end_ang - start_ang if start_ang <= end_ang
+                else (end_ang + 360) - start_ang
+            )
+
+            step = (clockwise_diff) % 360 / max(num_sample-1, 1)
+            ang = math.radians((start_ang + step * (n)) % 360) 
+
+            print(f"angle: {ang}, distance: {dist}")
+
+            new_point = Point(
+                dist * math.cos(ang),
+                dist * math.sin(ang)
+            )
+            print(f"new point: {new_point}")
+            points.append(new_point)
+
+            
 
         return points
 
@@ -201,27 +208,35 @@ class ReadLidarThread(QtCore.QThread):
     def test_buffer_read(self):
         # buffer = bytearray()
         buffer = bytearray([
-            0xaa, 0x55, 0x22, 0x28, 0x51, 0x36, 0xa7, 0x43,
-            0x2c, 0x04, 0xf8, 0x18, 0x88, 0x19, 0x18, 0x1a,
-            0xa0, 0x1b, 0x80, 0x1b, 0x40, 0x1a, 0x0c, 0x1b,
-            0xbc, 0x1a, 0x68, 0x1a, 0x70, 0x1a, 0x3c, 0x1a,
-            0x10, 0x1a, 0xf0, 0x19, 0xc8, 0x19, 0xa4, 0x19,
-            0x7c, 0x19, 0x58, 0x19, 0x34, 0x19, 0x14, 0x19,
-            0xf4, 0x18, 0xd4, 0x18, 0xb4, 0x18, 0x98, 0x18,
-            0x78, 0x18, 0x60, 0x18, 0x8a, 0x15, 0x64, 0x15,
-            0xfc, 0x15, 0x00, 0x16, 0x00, 0x16, 0x04, 0x16,
-            0x0c, 0x16, 0x08, 0x16, 0x20, 0x16, 0x28, 0x16,
-            0x34, 0x16, 0x48, 0x16, 0x58, 0x16, 0x68, 0x16,
-            0x78, 0x16
+            0xAA, 0x55,       # ph
+            0x00,             # ct
+            0x02,             # lsn
+            0x00, 0x00,       # fsa (start angle)
+            0x00, 0x05,       # lsa (end angle)
+            0x00, 0x00,       # cs (checksum placeholder)
+            0xA0, 0x0F,       # s1 = 1000mm
+            0x40, 0x1F        # s2 = 2000mm
         ])
+        # buffer = bytearray([
+        #     0xaa, 0x55, 0x22, 0x28, 0x51, 0x36, 0xa7, 0x43,
+        #     0x2c, 0x04, 0xf8, 0x18, 0x88, 0x19, 0x18, 0x1a,
+        #     0xa0, 0x1b, 0x80, 0x1b, 0x40, 0x1a, 0x0c, 0x1b,
+        #     0xbc, 0x1a, 0x68, 0x1a, 0x70, 0x1a, 0x3c, 0x1a,
+        #     0x10, 0x1a, 0xf0, 0x19, 0xc8, 0x19, 0xa4, 0x19,
+        #     0x7c, 0x19, 0x58, 0x19, 0x34, 0x19, 0x14, 0x19,
+        #     0xf4, 0x18, 0xd4, 0x18, 0xb4, 0x18, 0x98, 0x18,
+        #     0x78, 0x18, 0x60, 0x18, 0x8a, 0x15, 0x64, 0x15,
+        #     0xfc, 0x15, 0x00, 0x16, 0x00, 0x16, 0x04, 0x16,
+        #     0x0c, 0x16, 0x08, 0x16, 0x20, 0x16, 0x28, 0x16,
+        #     0x34, 0x16, 0x48, 0x16, 0x58, 0x16, 0x68, 0x16,
+        #     0x78, 0x16
+        # ])
         curr_packet_size_left = 0
         points = []
         while self._running:
-            # new_buff = ser.read(ser.in_waiting or 64)
             # buffer += new_buff
 
             # leave room for header
-            # print(f"buff size: {len(buffer)}, curr_packet_size_left: {curr_packet_size_left}")
             if len(buffer) < 2:
                 continue
 
@@ -238,13 +253,14 @@ class ReadLidarThread(QtCore.QThread):
             if curr_packet_size_left == 0:
 
                 lsn = buffer[3]
-                FIXED_BYTES = 10  # header + fixed fields (example)
+                # FIXED_BYTES = 12  # header + fixed fields (example)
+                FIXED_BYTES = 10  # PH(2) + CT(1) + LSN(1) + FSA(2) + LSA(2) + CS(2) = 10
+                # CHECK_SUM_B = 2
                 curr_packet_size_left = FIXED_BYTES + (lsn * 2)
-                print(f"the supposed length: {curr_packet_size_left}")
 
             next_header_idx = buffer.find(bytearray([0xAA, 0x55]), 1)
             if next_header_idx != -1 and next_header_idx < curr_packet_size_left:
-                print("PACKET WAS LOST")
+                # print("PACKET WAS LOST")
                 buffer = buffer[next_header_idx:]  # discard bytes before next header
                 curr_packet_size_left = 0
                 continue
@@ -252,18 +268,22 @@ class ReadLidarThread(QtCore.QThread):
             # check if packet_size was reached
             if len(buffer) >= curr_packet_size_left:
                 packet = buffer[:curr_packet_size_left]
-                print("NO PACKET WAS LOST")
+                # print("NO PACKET WAS LOST")
                 points = points + self.parse_data_to_point(packet)
                 buffer = buffer[curr_packet_size_left:]
                 curr_packet_size_left = 0
+                if len(points) != 0:
+                    print("ADD POINTS")
+                    self.data_ready.emit(PointsList(points))
                 continue
+
     
     def run(self):
         buffer = bytearray()
         curr_packet_size_left = 0
-        # self.test_buffer_read()
+        self.test_buffer_read()
 
-        # return
+        return
         
         while self._running:
             time.sleep(0.1)
@@ -275,7 +295,6 @@ class ReadLidarThread(QtCore.QThread):
                     buffer += new_buff
 
                     # leave room for header
-                    # print(f"buff size: {len(buffer)}, curr_packet_size_left: {curr_packet_size_left}")
                     if len(buffer) < 2:
                         continue
 
@@ -299,7 +318,7 @@ class ReadLidarThread(QtCore.QThread):
 
                     next_header_idx = buffer.find(bytearray([0xAA, 0x55]), 1)
                     if next_header_idx != -1 and next_header_idx < curr_packet_size_left:
-                        print("PACKET WAS LOST")
+                        # print("PACKET WAS LOST")
                         buffer = buffer[next_header_idx:]  # discard bytes before next header
                         curr_packet_size_left = 0
                         continue
@@ -307,12 +326,12 @@ class ReadLidarThread(QtCore.QThread):
                     # check if packet_size was reached
                     if len(buffer) >= curr_packet_size_left:
                         packet = buffer[:curr_packet_size_left]
-                        print("NO PACKET WAS LOST")
+                        # print("NO PACKET WAS LOST")
                         points = points + self.parse_data_to_point(packet)
                         buffer = buffer[curr_packet_size_left:]
                         curr_packet_size_left = 0
                         if len(points) != 0:
-                            print("ADD POINT")
+                            print("ADD POINTS")
                             self.data_ready.emit(PointsList(points))
                         continue
 
