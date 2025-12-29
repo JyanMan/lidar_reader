@@ -27,8 +27,6 @@ class PointsList:
         self.points = points
 
 
-
-
 class ReadLidarThread(QtCore.QThread):
 
     data_ready = QtCore.pyqtSignal(PointsList)
@@ -135,7 +133,6 @@ class ReadLidarThread(QtCore.QThread):
         #     return []
 
         if ct == 0:
-            print("packet is a point cloud")
 
             # checksum
             calc_cs = 0x0000 
@@ -144,8 +141,9 @@ class ReadLidarThread(QtCore.QThread):
             print(f"{hex(left_cs)}, {hex(right_cs)}")
 
             if cs[0] != left_cs or cs[1] != right_cs:
-                print("cs not the same")
-                return []
+                pass
+                # print("cs not the same")
+                # return []
 
         points = []
         raw_start_ang = ((fsa[1] << 8) | fsa[0])
@@ -155,18 +153,21 @@ class ReadLidarThread(QtCore.QThread):
 
         first_dist= ((packet[11] << 8) | packet[10]) / 4.0
         last_dist = ((packet[num_sample-1] << 8) | packet[num_sample-2]) / 4.0
-        start_ang_correction = math.atan(21.8 * ((155.3-first_dist)/max(155.3*first_dist, 1)))
-        end_ang_correction = math.atan(21.8 * ((155.3-last_dist)/max(155.3*last_dist, 1)))
+        # start_ang_correction = math.atan(21.8 * ((155.3-first_dist)/max(155.3*first_dist, 1)))
+        # end_ang_correction = math.atan(21.8 * ((155.3-last_dist)/max(155.3*last_dist, 1)))
         # start_ang_correction = math.atan(21.8 * ((155.3-first_dist)/max(155.3, 1)))
         # end_ang_correction = math.atan(21.8 * ((155.3-last_dist)/max(155.3, 1)))
 
-        start_ang = start_ang + start_ang_correction
-        end_ang = end_ang + end_ang_correction
+        # start_ang = start_ang + start_ang_correction
+        # end_ang = end_ang + end_ang_correction
 
         # start_ang = start_ang % 360
         # end_ang = end_ang % 360
 
+            
+        
         for n in range(0, num_sample):
+            
             sn_byte = packet[10 + n*2 : 12 + n*2]
             if len(sn_byte) < 2:
                 continue
@@ -176,24 +177,28 @@ class ReadLidarThread(QtCore.QThread):
             if dist <= 50:
                 continue
 
+            clockwise_diff = 0
+            if num_sample > 1:
+                # strict clockwise from start to end --> not the shortest distance
+                clockwise_diff = (
+                    end_ang - start_ang if start_ang <= end_ang
+                    else (end_ang + 360) - start_ang
+                )
 
-            clockwise_diff = (
-                end_ang - start_ang if start_ang <= end_ang
-                else (end_ang + 360) - start_ang
-            )
+            ang_correction =math.atan(21.8 * ((155.3-last_dist)/max(155.3*dist, 1)))
 
-            step = (clockwise_diff) % 360 / max(num_sample-1, 1)
-            ang = math.radians((start_ang + step * (n)) % 360) 
+            step = (clockwise_diff) / (num_sample-1)
+            ang = start_ang + step*(n-1) + ang_correction
+            ang = math.radians(ang % 360) 
 
-            print(f"angle: {ang}, distance: {dist}")
+            # print(f"angle: {ang}, distance: {dist}")
 
             new_point = Point(
                 dist * math.cos(ang),
                 dist * math.sin(ang)
             )
-            print(f"new point: {new_point}")
+            # print(f"new point: {new_point}")
             points.append(new_point)
-
             
 
         return points
@@ -217,20 +222,10 @@ class ReadLidarThread(QtCore.QThread):
             0xA0, 0x0F,       # s1 = 1000mm
             0x40, 0x1F        # s2 = 2000mm
         ])
-        # buffer = bytearray([
-        #     0xaa, 0x55, 0x22, 0x28, 0x51, 0x36, 0xa7, 0x43,
-        #     0x2c, 0x04, 0xf8, 0x18, 0x88, 0x19, 0x18, 0x1a,
-        #     0xa0, 0x1b, 0x80, 0x1b, 0x40, 0x1a, 0x0c, 0x1b,
-        #     0xbc, 0x1a, 0x68, 0x1a, 0x70, 0x1a, 0x3c, 0x1a,
-        #     0x10, 0x1a, 0xf0, 0x19, 0xc8, 0x19, 0xa4, 0x19,
-        #     0x7c, 0x19, 0x58, 0x19, 0x34, 0x19, 0x14, 0x19,
-        #     0xf4, 0x18, 0xd4, 0x18, 0xb4, 0x18, 0x98, 0x18,
-        #     0x78, 0x18, 0x60, 0x18, 0x8a, 0x15, 0x64, 0x15,
-        #     0xfc, 0x15, 0x00, 0x16, 0x00, 0x16, 0x04, 0x16,
-        #     0x0c, 0x16, 0x08, 0x16, 0x20, 0x16, 0x28, 0x16,
-        #     0x34, 0x16, 0x48, 0x16, 0x58, 0x16, 0x68, 0x16,
-        #     0x78, 0x16
-        # ])
+
+        left_cs, right_cs = self.compute_checksum(buffer)
+        buffer[8] = left_cs
+        buffer[9] = right_cs
         curr_packet_size_left = 0
         points = []
         while self._running:
@@ -273,7 +268,7 @@ class ReadLidarThread(QtCore.QThread):
                 buffer = buffer[curr_packet_size_left:]
                 curr_packet_size_left = 0
                 if len(points) != 0:
-                    print("ADD POINTS")
+                   # print("ADD POINTS")
                     self.data_ready.emit(PointsList(points))
                 continue
 
@@ -281,9 +276,9 @@ class ReadLidarThread(QtCore.QThread):
     def run(self):
         buffer = bytearray()
         curr_packet_size_left = 0
-        self.test_buffer_read()
+        # self.test_buffer_read()
 
-        return
+        # return
         
         while self._running:
             time.sleep(0.1)

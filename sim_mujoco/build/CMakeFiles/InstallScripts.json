@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"/home/juanman/Programming/slinam_tests/lidar_reader/sim_mujoco/build/cmake_install.cmake"
+	],
+	"Parallel" : false
+}
