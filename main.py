@@ -272,6 +272,10 @@ class ReadLidarThread(QtCore.QThread):
                     self.data_ready.emit(PointsList(points))
                 continue
 
+
+    def test_read_packets_from():
+        pass
+
     
     def run(self):
         buffer = bytearray()

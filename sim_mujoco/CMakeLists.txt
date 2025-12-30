@@ -98,7 +98,9 @@ target_link_options(lidar_test PRIVATE ${MUJOCO_SAMPLE_LINK_OPTIONS})
 
 add_custom_command(
   TARGET lidar_test
-  POST_BUILD
+  PRE_BUILD
+  COMMAND rm -rf ${CMAKE_CURRENT_SOURCE_DIR}/build/bin
+  COMMAND mkdir ${CMAKE_CURRENT_SOURCE_DIR}/build/bin
   COMMAND cp ${CMAKE_CURRENT_SOURCE_DIR}/models/ ${CMAKE_CURRENT_SOURCE_DIR}/build/bin/models/ -r
   VERBATIM
 )

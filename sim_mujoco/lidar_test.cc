@@ -1,9 +1,13 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-
 #include <GLFW/glfw3.h>
 #include <mujoco/mujoco.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+
+#define PI 3.14159
 
 typedef struct KeyInputs {
   bool up, down, left, right;
@@ -19,7 +23,7 @@ mjvScene scn;                       // abstract scene
 mjrContext con;                     // custom GPU context
 
 // keyboard callback
-void keyboard(GLFWwindow* window, int key, int scancode, int act, int mods) {
+static void keyboard(GLFWwindow* window, int key, int scancode, int act, int mods) {
   // backspace: reset simulation
   if (act==GLFW_PRESS) {
     switch (key) {
@@ -66,33 +70,116 @@ void keyboard(GLFWwindow* window, int key, int scancode, int act, int mods) {
   }
 }
 
-void slinam_movement(KeyInputs keyinputs) {
-  const double speed = 0.2;
+static void slinam_movement(KeyInputs keyinputs) {
+  static const double speed = 0.2;
   int slinam_id = mj_name2id(m, mjOBJ_BODY, "slinam");
+  int index = slinam_id * 3;
   if (slinam_id) {
     if (keyinputs.up) {
-      d->qvel[3*slinam_id + 0] = speed; 
+      d->qvel[index + 0] = speed; 
     }
     else if (keyinputs.down) {
-      d->qvel[3*slinam_id + 0] = -speed; 
+      d->qvel[index + 0] = -speed; 
     }
     else {
-      d->qvel[3*slinam_id + 0] = 0.0; 
+      d->qvel[index + 0] = 0.0; 
     }
     if (keyinputs.right) {
-      d->qvel[3*slinam_id + 1] = speed; 
+      d->qvel[index + 1] = speed; 
     }
     else if (keyinputs.left) {
-      d->qvel[3*slinam_id + 1] = -speed; 
+      d->qvel[index + 1] = -speed; 
     }
     else {
-      d->qvel[3*slinam_id + 1] = 0.0; 
+      d->qvel[index + 1] = 0.0; 
     }
   }
 }
 
+#define PORT 2000
+#define IP_ADDR "127.0.0.1"
+static void send_socket(uint32_t byte_to_send) {
+  int socket_desc = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 
-// main function
+  struct sockaddr_in server_addr;
+  server_addr.sin_family = AF_INET;
+  server_addr.sin_port = htons(PORT);
+  server_addr.sin_addr.s_addr = inet_addr(IP_ADDR);
+
+  int res = bind(socket_desc, (struct sockaddr*)&server_addr, sizeof(server_addr));
+
+  if (!res) {
+    std::printf("ERROR: unable to bind server\n");
+    exit(EXIT_FAILURE);
+  }
+
+  if (!sendto(socket_desc, &byte_to_send, sizeof(byte_to_send), 0,
+         (struct sockaddr*)&server_addr, sizeof(server_addr))) {
+    std::printf("ERROR: unable to send packet\n");
+  }
+
+  close(socket_desc);
+}
+
+static void send_socket_udp(double coord[2]) {
+  static uint32_t nbytes = 0;
+  const int max_bytes= 50;
+
+  switch (nbytes) {
+    case 0:
+      send_socket(0x55);
+      break;
+    case 1:
+      send_socket(0xAA);
+      break;
+  }
+
+  nbytes++;
+  if (nbytes >= max_bytes) {
+    nbytes = 0;
+  }
+}
+
+static void raycast_from_slinam(double delta_time) {
+
+  static double rad_dir = 0;
+
+  int slinam_id = mj_name2id(m, mjOBJ_BODY, "slinam");
+  int index = slinam_id * 3;
+  const mjtNum start[3] = {
+    d->xpos[index + 0],
+    d->xpos[index + 1],
+    d->xpos[index + 2],
+  };
+  const mjtNum dir[3] = { cos(rad_dir), sin(rad_dir), 0.0 };
+  
+  int hit_id  = 0;
+  mjtNum dist = mj_ray(m, d, start, dir, NULL, 0, slinam_id, &hit_id);
+
+  if (dist != -1) {
+    const mjtNum hit_pos[3] = {
+      start[0] + dir[0]*dist, 
+      start[1] + dir[1]*dist, 
+      start[2] + dir[2]*dist, 
+    };
+    std::printf("intersecting hit_pos: %f, %f, %f\n", hit_pos[0], hit_pos[1], hit_pos[2]);
+    double coord[2] = {hit_pos[0], hit_pos[1]};
+    send_socket_udp(coord);
+  }
+
+  rad_dir += delta_time;
+  if (rad_dir >= 2 * PI) {
+    rad_dir = 0.0;
+  }
+}
+
+static void fixed_update(KeyInputs keyinputs, double delta_time) {
+  slinam_movement(keyinputs);
+  raycast_from_slinam(delta_time);
+  mj_step(m, d);
+}
+
+
 int main(int argc, const char** argv) {
   // check command-line arguments
   if (argc!=1) {
@@ -104,14 +191,6 @@ int main(int argc, const char** argv) {
 
   // load and compile model
   char error[1000] = "Could not load binary model";
-  // if (std::strlen(slinam_robot_dir)>4 && !std::strcmp(slinam_robot_dir+std::strlen(slinam_robot_dir)-4, ".mjb")) {
-  //   m = mj_loadModel(slinam_robot_dir, 0);
-  // } else {
-  //   m = mj_loadXML(slinam_robot_dir, 0, error, 1000);
-  // }
-  // if (!m) {
-  //   mju_error("Load model error: %s", error);
-  // }
 
   mjSpec* spec = NULL;
   mjsBody* slinam = NULL;
@@ -155,9 +234,6 @@ int main(int argc, const char** argv) {
 
   // install GLFW mouse and keyboard callbacks
   glfwSetKeyCallback(window, keyboard);
-  // glfwSetCursorPosCallback(window, mouse_move);
-  // glfwSetMouseButtonCallback(window, mouse_button);
-  // glfwSetScrollCallback(window, scroll);
 
   // run main loop, target real-time simulation and 60 fps rendering
   while (!glfwWindowShouldClose(window)) {
@@ -166,9 +242,10 @@ int main(int argc, const char** argv) {
     //  this loop will finish on time for the next frame to be rendered at 60 fps.
     //  Otherwise add a cpu timer and exit this loop when it is time to render.
     mjtNum simstart = d->time;
-    while (d->time - simstart < 1.0/60.0) {
-      slinam_movement(keyinputs);
-      mj_step(m, d);
+    double delta_time = d->time - simstart;
+    while (delta_time < 1.0/60.0) {
+      fixed_update(keyinputs, delta_time);
+      delta_time = d->time - simstart;
     }
 
     // get framebuffer viewport

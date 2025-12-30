@@ -15,7 +15,7 @@
 ########################
 
 //Build SHARED libraries
-BUILD_SHARED_LIBS:BOOL=OFF
+BUILD_SHARED_LIBS:BOOL=ON
 
 //Path to a program.
 CMAKE_ADDR2LINE:FILEPATH=/usr/bin/addr2line
@@ -29,8 +29,8 @@ CMAKE_BUILD_TYPE:STRING=Release
 //Enable/Disable color output during build.
 CMAKE_COLOR_MAKEFILE:BOOL=ON
 
-//C++ compiler
-CMAKE_CXX_COMPILER:STRING=clang++
+//CXX compiler
+CMAKE_CXX_COMPILER:STRING=/usr/bin/clang++
 
 //LLVM archiver
 CMAKE_CXX_COMPILER_AR:FILEPATH=CMAKE_CXX_COMPILER_AR-NOTFOUND
