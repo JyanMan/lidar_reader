@@ -283,6 +283,11 @@ class ReadLidarThread(QtCore.QThread):
         # self.test_buffer_read()
 
         # return
+        while self._running:
+            time.sleep(0.1)
+            pass
+
+        return
         
         while self._running:
             time.sleep(0.1)

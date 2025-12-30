@@ -98,7 +98,17 @@ static void slinam_movement(KeyInputs keyinputs) {
 
 #define PORT 2000
 #define IP_ADDR "127.0.0.1"
-static void send_socket(uint32_t byte_to_send) {
+#define NUM_SAMP 5
+
+void send_socket(int socket_desc, struct sockaddr_in *server_addr, uint32_t byte_to_send) {
+  printf(" | %02X", byte_to_send);
+  // if (!sendto(socket_desc, &byte_to_send, sizeof(byte_to_send), 0,
+  //        (struct sockaddr*)server_addr, sizeof(*server_addr))) {
+  //   std::printf("ERROR: unable to send packet\n");
+  // }
+}
+
+static void send_socket_udp(double start_ang, double end_ang, uint16_t samp_dists[NUM_SAMP]) {
   int socket_desc = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 
   struct sockaddr_in server_addr;
@@ -106,43 +116,67 @@ static void send_socket(uint32_t byte_to_send) {
   server_addr.sin_port = htons(PORT);
   server_addr.sin_addr.s_addr = inet_addr(IP_ADDR);
 
-  int res = bind(socket_desc, (struct sockaddr*)&server_addr, sizeof(server_addr));
+  // int res = bind(socket_desc, (struct sockaddr*)&server_addr, sizeof(server_addr));
 
-  if (!res) {
-    std::printf("ERROR: unable to bind server\n");
+  // if (res == -1) {
+  //   std::printf("ERROR: unable to bind server\n");
+  //   exit(EXIT_FAILURE);
+  // }
+
+  printf("start packet :\n");
+
+  uint8_t ph_lsb = 0x55;
+  uint8_t ph_msb = 0xAA;
+  send_socket(socket_desc, &server_addr, ph_lsb);
+  send_socket(socket_desc, &server_addr, ph_msb);
+
+  uint8_t ct = 0x00;
+  send_socket(socket_desc, &server_addr, ct);
+  uint8_t lsn = 50;
+  send_socket(socket_desc, &server_addr, lsn);
+
+  uint8_t fsa_lsb = (uint8_t)start_ang;
+  uint8_t fsa_msb = (uint16_t)start_ang >> 8;
+  send_socket(socket_desc, &server_addr, fsa_lsb);
+  send_socket(socket_desc, &server_addr, fsa_msb);
+
+  uint8_t lsa_lsb = (uint8_t)end_ang;
+  uint8_t lsa_msb = (uint16_t)end_ang >> 8;
+  send_socket(socket_desc, &server_addr, lsa_lsb);
+  send_socket(socket_desc, &server_addr, lsa_msb);
+
+  uint8_t cs_lsb = 0;
+  uint8_t cs_msb = 0;
+  send_socket(socket_desc, &server_addr, cs_lsb);
+  send_socket(socket_desc, &server_addr, cs_msb);
+
+  if (NUM_SAMP <= 1) {
+    printf("number of distance samples is too small\n");
     exit(EXIT_FAILURE);
   }
+  for (int i = 0; i < NUM_SAMP; i++) {
+    uint16_t v = samp_dists[i];
 
-  if (!sendto(socket_desc, &byte_to_send, sizeof(byte_to_send), 0,
-         (struct sockaddr*)&server_addr, sizeof(server_addr))) {
-    std::printf("ERROR: unable to send packet\n");
+    uint8_t dist_lsb = (uint8_t)(v & 0xFF);
+    uint8_t dist_msb = (uint8_t)((v >> 8) & 0xFF);
+    // printf("dist lsb: %02X, msb: %02X ACTUAL VAL: %u\n",
+    //    (unsigned)dist_lsb,
+    //    (unsigned)dist_msb,
+    //    (unsigned)samp_dists[i]);
+    send_socket(socket_desc, &server_addr, dist_lsb);
+    send_socket(socket_desc, &server_addr, dist_msb);
+    samp_dists[i] = 0;
   }
-
   close(socket_desc);
-}
-
-static void send_socket_udp(double coord[2]) {
-  static uint32_t nbytes = 0;
-  const int max_bytes= 50;
-
-  switch (nbytes) {
-    case 0:
-      send_socket(0x55);
-      break;
-    case 1:
-      send_socket(0xAA);
-      break;
-  }
-
-  nbytes++;
-  if (nbytes >= max_bytes) {
-    nbytes = 0;
-  }
+  printf("\n : end packet\n");
 }
 
 static void raycast_from_slinam(double delta_time) {
-
-  static double rad_dir = 0;
+  static double rad_dir = 0.0;
+  static int nbytes = 0;
+  static double start_ang = 0.0;
+  static double end_ang = 0.0;
+  static uint16_t samp_dists[NUM_SAMP];
 
   int slinam_id = mj_name2id(m, mjOBJ_BODY, "slinam");
   int index = slinam_id * 3;
@@ -156,15 +190,34 @@ static void raycast_from_slinam(double delta_time) {
   int hit_id  = 0;
   mjtNum dist = mj_ray(m, d, start, dir, NULL, 0, slinam_id, &hit_id);
 
+  if (nbytes == 0) {
+    start_ang = rad_dir;
+  }
+  else if (nbytes == NUM_SAMP - 1) {
+    end_ang = rad_dir;
+  }
+
   if (dist != -1) {
-    const mjtNum hit_pos[3] = {
-      start[0] + dir[0]*dist, 
-      start[1] + dir[1]*dist, 
-      start[2] + dir[2]*dist, 
-    };
-    std::printf("intersecting hit_pos: %f, %f, %f\n", hit_pos[0], hit_pos[1], hit_pos[2]);
-    double coord[2] = {hit_pos[0], hit_pos[1]};
-    send_socket_udp(coord);
+    // const mjtNum hit_pos[3] = {
+    //   start[0] + dir[0]*dist, 
+    //   start[1] + dir[1]*dist, 
+    //   start[2] + dir[2]*dist, 
+    // };
+    // std::printf("intersecting hit_pos: %f, %f, %f\n", hit_pos[0], hit_pos[1], hit_pos[2]);
+
+    samp_dists[nbytes] = (uint16_t)lround(dist * 100.0);
+    // printf("samp dist: %d, actual dist: %f\n", samp_dists[nbytes], dist);
+  }
+  else {
+    samp_dists[nbytes] = 0;
+  }
+
+  nbytes++;
+  if (nbytes >= NUM_SAMP) {
+    send_socket_udp(start_ang, end_ang, samp_dists);
+    nbytes = 0;
+    start_ang = 0.0;
+    end_ang = 0.0;
   }
 
   rad_dir += delta_time;

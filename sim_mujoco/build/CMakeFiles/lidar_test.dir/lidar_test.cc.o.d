@@ -173,4 +173,19 @@ CMakeFiles/lidar_test.dir/lidar_test.cc.o: \
   /usr/bin/../lib64/gcc/x86_64-pc-linux-gnu/15.2.1/../../../../include/c++/15.2.1/bits/stl_bvector.h \
   /usr/bin/../lib64/gcc/x86_64-pc-linux-gnu/15.2.1/../../../../include/c++/15.2.1/bits/vector.tcc \
   /usr/include/mujoco/mjvisualize.h /usr/include/mujoco/mjrender.h \
-  /usr/include/mujoco/mjsan.h /usr/include/mujoco/mjui.h
+  /usr/include/mujoco/mjsan.h /usr/include/mujoco/mjui.h \
+  /usr/include/sys/socket.h /usr/include/bits/types/struct_iovec.h \
+  /usr/include/bits/socket.h /usr/include/bits/socket_type.h \
+  /usr/include/bits/sockaddr.h /usr/include/asm/socket.h \
+  /usr/include/asm-generic/socket.h /usr/include/linux/posix_types.h \
+  /usr/include/linux/stddef.h /usr/include/asm/posix_types.h \
+  /usr/include/asm/posix_types_64.h \
+  /usr/include/asm-generic/posix_types.h /usr/include/asm/bitsperlong.h \
+  /usr/include/asm-generic/bitsperlong.h /usr/include/asm/sockios.h \
+  /usr/include/asm-generic/sockios.h \
+  /usr/include/bits/types/struct_osockaddr.h /usr/include/arpa/inet.h \
+  /usr/include/netinet/in.h /usr/include/bits/in.h /usr/include/unistd.h \
+  /usr/include/bits/posix_opt.h /usr/include/bits/environments.h \
+  /usr/include/bits/confname.h /usr/include/bits/getopt_posix.h \
+  /usr/include/bits/getopt_core.h /usr/include/bits/unistd_ext.h \
+  /usr/include/linux/close_range.h

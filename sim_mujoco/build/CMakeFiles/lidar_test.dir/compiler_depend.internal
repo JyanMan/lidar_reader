@@ -109,19 +109,34 @@ CMakeFiles/lidar_test.dir/lidar_test.cc.o
  /usr/include/GLFW/glfw3.h
  /usr/include/KHR/khrplatform.h
  /usr/include/alloca.h
+ /usr/include/arpa/inet.h
+ /usr/include/asm-generic/bitsperlong.h
  /usr/include/asm-generic/errno-base.h
  /usr/include/asm-generic/errno.h
+ /usr/include/asm-generic/posix_types.h
+ /usr/include/asm-generic/socket.h
+ /usr/include/asm-generic/sockios.h
+ /usr/include/asm/bitsperlong.h
  /usr/include/asm/errno.h
+ /usr/include/asm/posix_types.h
+ /usr/include/asm/posix_types_64.h
+ /usr/include/asm/socket.h
+ /usr/include/asm/sockios.h
  /usr/include/bits/atomic_wide_counter.h
  /usr/include/bits/byteswap.h
+ /usr/include/bits/confname.h
  /usr/include/bits/endian.h
  /usr/include/bits/endianness.h
+ /usr/include/bits/environments.h
  /usr/include/bits/errno.h
  /usr/include/bits/floatn-common.h
  /usr/include/bits/floatn.h
  /usr/include/bits/flt-eval-method.h
  /usr/include/bits/fp-fast.h
  /usr/include/bits/fp-logb.h
+ /usr/include/bits/getopt_core.h
+ /usr/include/bits/getopt_posix.h
+ /usr/include/bits/in.h
  /usr/include/bits/iscanonical.h
  /usr/include/bits/libc-header-start.h
  /usr/include/bits/libm-simd-decl-stubs.h
@@ -132,9 +147,13 @@ CMakeFiles/lidar_test.dir/lidar_test.cc.o
  /usr/include/bits/mathcalls-macros.h
  /usr/include/bits/mathcalls-narrow.h
  /usr/include/bits/mathcalls.h
+ /usr/include/bits/posix_opt.h
  /usr/include/bits/pthreadtypes-arch.h
  /usr/include/bits/pthreadtypes.h
  /usr/include/bits/select.h
+ /usr/include/bits/sockaddr.h
+ /usr/include/bits/socket.h
+ /usr/include/bits/socket_type.h
  /usr/include/bits/stdint-intn.h
  /usr/include/bits/stdint-least.h
  /usr/include/bits/stdint-uintn.h
@@ -163,6 +182,8 @@ CMakeFiles/lidar_test.dir/lidar_test.cc.o
  /usr/include/bits/types/mbstate_t.h
  /usr/include/bits/types/sigset_t.h
  /usr/include/bits/types/struct_FILE.h
+ /usr/include/bits/types/struct_iovec.h
+ /usr/include/bits/types/struct_osockaddr.h
  /usr/include/bits/types/struct_timespec.h
  /usr/include/bits/types/struct_timeval.h
  /usr/include/bits/types/time_t.h
@@ -170,6 +191,7 @@ CMakeFiles/lidar_test.dir/lidar_test.cc.o
  /usr/include/bits/types/wint_t.h
  /usr/include/bits/typesizes.h
  /usr/include/bits/uintn-identity.h
+ /usr/include/bits/unistd_ext.h
  /usr/include/bits/waitflags.h
  /usr/include/bits/waitstatus.h
  /usr/include/bits/wchar.h
@@ -181,7 +203,10 @@ CMakeFiles/lidar_test.dir/lidar_test.cc.o
  /usr/include/features.h
  /usr/include/gnu/stubs-64.h
  /usr/include/gnu/stubs.h
+ /usr/include/linux/close_range.h
  /usr/include/linux/errno.h
+ /usr/include/linux/posix_types.h
+ /usr/include/linux/stddef.h
  /usr/include/locale.h
  /usr/include/math.h
  /usr/include/mujoco/mjdata.h
@@ -197,6 +222,7 @@ CMakeFiles/lidar_test.dir/lidar_test.cc.o
  /usr/include/mujoco/mjui.h
  /usr/include/mujoco/mjvisualize.h
  /usr/include/mujoco/mujoco.h
+ /usr/include/netinet/in.h
  /usr/include/stdc-predef.h
  /usr/include/stdint.h
  /usr/include/stdio.h
@@ -205,8 +231,10 @@ CMakeFiles/lidar_test.dir/lidar_test.cc.o
  /usr/include/strings.h
  /usr/include/sys/cdefs.h
  /usr/include/sys/select.h
+ /usr/include/sys/socket.h
  /usr/include/sys/types.h
  /usr/include/tbb/tbb.h
+ /usr/include/unistd.h
  /usr/include/wchar.h
  /usr/lib/clang/21/include/__stdarg___gnuc_va_list.h
  /usr/lib/clang/21/include/__stddef_header_macro.h
