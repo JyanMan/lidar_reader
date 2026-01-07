@@ -13,8 +13,7 @@ from matplotlib.backends.qt_compat import QtWidgets, QtCore
 from matplotlib.figure import Figure
 from queue import Queue
 
-
-
+DEBUG = True
 
 class Point:
     def __init__(self, x, y):
@@ -30,6 +29,9 @@ class PointsList:
         self.points = points
 
 
+DEBUG_PACKET = True
+DEBUG_CHECKSUM = True
+DEBUG_NEW_POINTS = True
 class ReadLidarThread(QtCore.QThread):
 
     data_ready = QtCore.pyqtSignal(PointsList)
@@ -59,12 +61,11 @@ class ReadLidarThread(QtCore.QThread):
         return (left_cs, right_cs)
     
     def parse_data_to_point(self, packet) -> list[Point]:
-        for b in packet:
-            print(hex(b), end="|")
-        # print(packet)
+        if DEBUG_PACKET:
+            for b in packet:
+                print(hex(b), end="|")
 
         if len(packet) < 11:  # minimal packet size
-            print("low in size")
             return []
 
         ph = packet[0:2]
@@ -76,8 +77,6 @@ class ReadLidarThread(QtCore.QThread):
         all_bytes = packet[0:len(packet)]
 
         num_sample = lsn
-        # if num_sample == 0:
-        #     return []
 
         if ct == 0:
 
@@ -85,22 +84,34 @@ class ReadLidarThread(QtCore.QThread):
             calc_cs = 0x0000 
 
             left_cs, right_cs = self.compute_checksum(packet)
-            print(f"{hex(left_cs)}, {hex(right_cs)}")
+            if DEBUG_CHECKSUM:
+                print(f"{hex(left_cs)}, {hex(right_cs)}")
 
             if cs[0] != left_cs or cs[1] != right_cs:
-                pass
-                # print("cs not the same")
-                # return []
+                return []
 
         points = []
         raw_start_ang = ((fsa[1] << 8) | fsa[0])
         raw_end_ang = ((lsa[1] << 8) | lsa[0]) 
+
+
         start_ang = (raw_start_ang >> 1) / 64.0
         end_ang = (raw_end_ang >> 1) / 64.0
+
+        if DEBUG:
+            print(f"fsa: {raw_start_ang >> 1}, lsa: {raw_end_ang >> 1}");
 
         first_dist= ((packet[11] << 8) | packet[10]) / 4.0
         last_dist = ((packet[num_sample-1] << 8) | packet[num_sample-2]) / 4.0
                    
+        clockwise_diff = 0
+        if num_sample > 1:
+            # strict clockwise from start to end --> not the shortest distance
+            clockwise_diff = (
+                end_ang - start_ang if start_ang <= end_ang
+                else (end_ang + 360) - start_ang
+            )
+
         for n in range(0, num_sample):
             
             sn_byte = packet[10 + n*2 : 12 + n*2]
@@ -109,30 +120,29 @@ class ReadLidarThread(QtCore.QThread):
 
             dist = (sn_byte[1] << 8) | sn_byte[0]
             dist = dist / 4.0
-            if dist <= 50:
+            if dist <= 5:
                 continue
 
-            clockwise_diff = 0
-            if num_sample > 1:
-                # strict clockwise from start to end --> not the shortest distance
-                clockwise_diff = (
-                    end_ang - start_ang if start_ang <= end_ang
-                    else (end_ang + 360) - start_ang
-                )
 
-            ang_correction =math.atan(21.8 * ((155.3-last_dist)/max(155.3*dist, 1)))
+            ang_correction =math.atan(21.8 * ((155.3-dist)/max(155.3*dist, 1)))
 
             step = (clockwise_diff) / max(num_sample-1, 1)
-            ang = start_ang + step*(n-1) + ang_correction
-            ang = math.radians(ang % 360) 
-
-            # print(f"angle: {ang}, distance: {dist}")
+            ang = start_ang + step*n + ang_correction
+            # ang = start_ang + step*n
+            if ang < 0:
+                ang += 360
+            elif ang > 360:
+                ang -= 360
+            ang_rad = math.radians(ang) 
 
             new_point = Point(
-                dist * math.cos(ang),
-                dist * math.sin(ang)
+                dist * math.cos(ang_rad),
+                dist * math.sin(ang_rad)
             )
-            # print(f"new point: {new_point}")
+
+            if DEBUG_NEW_POINTS:
+                print(f"step: {step}, ang: {ang} => {ang_rad}, dist: {dist} new point: {new_point}")
+
             points.append(new_point)
             
 
@@ -145,27 +155,27 @@ class ReadLidarThread(QtCore.QThread):
         # for i in range(len(data)):
             
     
-    def test_buffer_read(self):
+    def test_buffer_read(self, buffer):
         # buffer = bytearray()
-        buffer = bytearray([
-            0xAA, 0x55,       # ph
-            0x00,             # ct
-            0x02,             # lsn
-            0x00, 0x00,       # fsa (start angle)
-            0x00, 0x05,       # lsa (end angle)
-            0x00, 0x00,       # cs (checksum placeholder)
-            0xA0, 0x0F,       # s1 = 1000mm
-            0x40, 0x1F        # s2 = 2000mm
-        ])
+        # buffer = bytearray([
+        #     0xAA, 0x55,       # ph
+        #     0x00,             # ct
+        #     0x02,             # lsn
+        #     0x00, 0x00,       # fsa (start angle)
+        #     0x00, 0x05,       # lsa (end angle)
+        #     0x00, 0x00,       # cs (checksum placeholder)
+        #     0xA0, 0x0F,       # s1 = 1000mm
+        #     0x40, 0x1F        # s2 = 2000mm
+        # ])
 
         left_cs, right_cs = self.compute_checksum(buffer)
         buffer[8] = left_cs
         buffer[9] = right_cs
         self.curr_packet_size_left = 0
         points = []
-        while self._running:
-            self.buffer = buffer
-            self.read_buffer_update_to_point()
+        # while self._running:
+        self.buffer = buffer
+        self.read_buffer_update_to_point()
 
 
     def read_buffer_update_to_point(self):
@@ -258,6 +268,9 @@ class ReadLidarThread(QtCore.QThread):
         self.points: list[Point] = []
 
         self.read_from_socket()
+        # self.test_buffer_read(bytearray([
+        #     0xaa , 0x55 , 0x00 , 0x02 , 0x33 , 0x69 , 0xc5 , 0x69 , 0xad , 0x57 , 0x8a , 0x04 , 0x7b, 0x04
+        # ]))
         # self.read_from_lidar()
 
 

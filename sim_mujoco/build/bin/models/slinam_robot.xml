@@ -4,13 +4,19 @@
   </default>
 
   <worldbody>
+
+    <body name="test_point1" pos="0 0 1" gravcomp="1">
+      <joint type="free"/>
+      <geom type="sphere" size="0.04"/>
+    </body>
+
     <light pos="0 1 1" dir="0 -1 -1" diffuse="1 1 1"/>
     <body pos="1 1 1" name="slinam">
       <geom group="1" type="cylinder" size="0.1" fromto="0 0 0  0 0 -.2" rgba="0.4 0.6 0.5 1"/>
       <joint type="free"/>
     </body>
 
-    <body pos="-1 -1 2">
+    <body pos="-1 -1 2" name="thebox">
       <geom group="0" type="box" size="0.5 0.5 0.5" rgba="0.7 0.4 0.3 1"/>
       <joint type="free"/>
     </body>

@@ -73,25 +73,25 @@ static void keyboard(GLFWwindow* window, int key, int scancode, int act, int mod
 static void slinam_movement(KeyInputs keyinputs) {
   static const double speed = 0.2;
   int slinam_id = mj_name2id(m, mjOBJ_BODY, "slinam");
-  int index = slinam_id * 3;
-  if (slinam_id) {
+  int index = m->body_dofadr[slinam_id];
+  if (slinam_id >= 0) {
     if (keyinputs.up) {
-      d->qvel[index + 0] = speed; 
-    }
-    else if (keyinputs.down) {
-      d->qvel[index + 0] = -speed; 
-    }
-    else {
-      d->qvel[index + 0] = 0.0; 
-    }
-    if (keyinputs.right) {
       d->qvel[index + 1] = speed; 
     }
-    else if (keyinputs.left) {
+    else if (keyinputs.down) {
       d->qvel[index + 1] = -speed; 
     }
     else {
       d->qvel[index + 1] = 0.0; 
+    }
+    if (keyinputs.right) {
+      d->qvel[index + 0] = speed; 
+    }
+    else if (keyinputs.left) {
+      d->qvel[index + 0] = -speed; 
+    }
+    else {
+      d->qvel[index + 0] = 0.0; 
     }
   }
 }
@@ -100,8 +100,10 @@ static void slinam_movement(KeyInputs keyinputs) {
 #define IP_ADDR "127.0.0.1"
 #define MAX_SAMP 5
 #define DEF_PROTOCOL_NUM 10
-#define DEBUG_SOCKET 1
-#define NUM_TEST_DATA 10
+#define NUM_TEST_DATA 2
+#define DEBUG_SOCKET 0
+#define DEBUG_RAYCAST_HIT_POINTS 0
+#define DEBUG_LIMIT_TEST 0
 
 static void send_socket(
   int socket_desc,
@@ -196,6 +198,29 @@ static void send_socket_udp(double start_ang, double end_ang, std::vector<uint16
 #endif
 }
 
+#if DEBUG_RAYCAST_HIT_POINTS
+static void move_test_point(double x, double y) {
+  int test_id = mj_name2id(m, mjOBJ_BODY, "test_point1");
+  if (test_id == -1) {
+    printf("FOUND NOTHING");
+    return;
+  }
+  int jntid = m->body_jntadr[test_id];
+  if (jntid == -1) {
+    printf("FOUND NOTHING2");
+    return;
+  }
+  int index = m->jnt_qposadr[jntid];
+  if (index == -1) {
+    printf("FOUND NOTHING3");
+    return;
+  }
+  printf("index for new point: %d\n", index);
+  d->qpos[index + 0] = x; 
+  d->qpos[index + 1] = y; 
+  d->qpos[index + 2] = 2;
+}
+#endif
 
 static void raycast_from_slinam(double delta_time) {
   static double rad_dir = 0.0;
@@ -205,7 +230,13 @@ static void raycast_from_slinam(double delta_time) {
   // static uint16_t samp_dists[NUM_SAMP];
   static std::vector<uint16_t> samp_dists;
 
+
+#if DEBUG_LIMIT_TEST
   static int ndata_sent = 0;
+  if (ndata_sent >= NUM_TEST_DATA) {
+    return;
+  }
+#endif
 
   int slinam_id = mj_name2id(m, mjOBJ_BODY, "slinam");
   int index = slinam_id * 3;
@@ -220,13 +251,21 @@ static void raycast_from_slinam(double delta_time) {
   mjtNum dist = mj_ray(m, d, start, dir, NULL, 0, slinam_id, &hit_id);
 
   double ang_deg = (rad_dir * 180 / PI);
-  int adjusted_ang = round(ang_deg * 640);
+  int adjusted_ang = (int)round(ang_deg * 64) << 1;
+  adjusted_ang |= 0x1;
   if (nbytes == 0) {
     start_ang = adjusted_ang;
   }
 
   if (dist != -1) {
-    samp_dists.push_back((uint16_t)lround(dist * 100.0));
+    uint16_t new_dist = (uint16_t)lround(dist * 400.0);
+    samp_dists.push_back(new_dist);
+#if DEBUG_RAYCAST_HIT_POINTS
+    double hit_point_x = start[0] + dir[0]*dist;
+    double hit_point_y = start[1] + dir[1]*dist;
+    printf("ang: %f, dist: %d, hit point: %f, %f\n", rad_dir, new_dist / 4, hit_point_x, hit_point_y);
+    move_test_point(hit_point_x, hit_point_y);
+#endif
   }
 
   nbytes++;
@@ -234,10 +273,12 @@ static void raycast_from_slinam(double delta_time) {
     if (samp_dists.size() != 0) {
       end_ang = adjusted_ang;
       send_socket_udp(start_ang, end_ang, samp_dists);
+#if DEBUG_LIMIT_TEST
       ndata_sent++;
-      if (ndata_sent >= NUM_TEST_DATA) {
-        exit(EXIT_SUCCESS);
-      } 
+#endif
+      // if (ndata_sent >= NUM_TEST_DATA) {
+      //   exit(EXIT_SUCCESS);
+      // } 
     }
     nbytes = 0;
     start_ang = 0.0;
